@@ -85,3 +85,43 @@ BEGIN
     DEALLOCATE cur_GroupStudents;
 END;
 GO
+
+-- Получить историю тестирования студента
+CREATE PROCEDURE sp_GetStudentTestHistory
+    @StudentID INT
+AS
+BEGIN
+    SELECT * FROM dbo.fn_GetStudentHistory(@StudentID);
+END;
+GO
+
+-- Проверить успеваемость группы по тесту
+CREATE PROCEDURE sp_CheckGroupPerformance
+    @GroupID INT,
+    @TestID INT
+AS
+BEGIN
+    DECLARE @AvgScore DECIMAL(5,2);
+    DECLARE @GroupName NVARCHAR(20);
+    DECLARE @TestName NVARCHAR(100);
+    
+    SELECT @GroupName = GroupName FROM Groups WHERE GroupID = @GroupID;
+    SELECT @TestName = TestName FROM Tests WHERE TestID = @TestID;
+    
+    SET @AvgScore = dbo.fn_GetGroupAverageScore(@GroupID, @TestID);
+    
+    PRINT N'Группа: ' + @GroupName;
+    PRINT N'Тест: ' + @TestName;
+    PRINT N'Средний балл: ' + CAST(@AvgScore AS NVARCHAR(10));
+    
+    IF @AvgScore >= 2.5
+        PRINT N'Статус: Хорошая успеваемость';
+    ELSE IF @AvgScore >= 1.5
+        PRINT N'Статус: Удовлетворительная успеваемость';
+    ELSE
+        PRINT N'Статус: Низкая успеваемость';
+END;
+GO
+
+PRINT N'Хранимые процедуры успешно созданы!';
+GO

@@ -14,7 +14,7 @@ BEGIN
         WHERE d.IsFinalized = 1 AND i.AttemptDate != d.AttemptDate
     )
     BEGIN
-        RAISERROR (N'Нельзя изменять завершенную попытку тестирования.', 16, 1);
+        THROW 50001, N'Нельзя изменять завершенную попытку тестирования.', 1;
         ROLLBACK TRANSACTION;
     END
 END;
@@ -33,7 +33,7 @@ BEGIN
         WHERE i.QuestionID != a.QuestionID
     )
     BEGIN
-        RAISERROR (N'Ответ не относится к указанному вопросу.', 16, 1);
+        THROW 50002, N'Ответ не относится к указанному вопросу.', 1;
         ROLLBACK TRANSACTION;
     END
 END;
@@ -48,7 +48,7 @@ BEGIN
     -- Проверка существования группы
     IF EXISTS (SELECT 1 FROM inserted i WHERE NOT EXISTS (SELECT 1 FROM Groups WHERE GroupID = i.GroupID))
     BEGIN
-        RAISERROR (N'Указанная группа не существует.', 16, 1);
+        THROW 50003, N'Указанная группа не существует.', 1;
         RETURN;
     END
     
@@ -67,7 +67,7 @@ BEGIN
     -- Проверка существования группы при изменении GroupID
     IF EXISTS (SELECT 1 FROM inserted i WHERE NOT EXISTS (SELECT 1 FROM Groups WHERE GroupID = i.GroupID))
     BEGIN
-        RAISERROR (N'Указанная группа не существует.', 16, 1);
+        THROW 50003, N'Указанная группа не существует.', 1;
         RETURN;
     END
     

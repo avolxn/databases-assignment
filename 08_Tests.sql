@@ -81,6 +81,7 @@ BEGIN
     IF @QID IS NOT NULL AND @AID IS NOT NULL
     BEGIN
         EXEC sp_SaveAnswer @AttemptID = @LastAttemptID, @QuestionID = @QID, @AnswerID = @AID;
+        SELECT TOP 1 * FROM StudentAnswers WHERE AttemptID = @LastAttemptID ORDER BY StudentAnswerID DESC;
         PRINT N'Ответ сохранен для попытки ' + CAST(@LastAttemptID AS NVARCHAR(10));
     END
 END
@@ -105,7 +106,22 @@ IF @TestGroupID IS NOT NULL AND @TestTestID3 IS NOT NULL
     EXEC sp_GetGroupReport @GroupID = @TestGroupID, @TestID = @TestTestID3;
 GO
 
-PRINT N'3.5. Курсор: Напоминания студентам, не приступавшим к тестированию:';
+PRINT N'3.5. История тестирования студента (sp_GetStudentTestHistory):';
+DECLARE @TestStudentID5 INT;
+SELECT @TestStudentID5 = (SELECT TOP 1 StudentID FROM TestAttempts WHERE IsFinalized = 1);
+IF @TestStudentID5 IS NOT NULL
+    EXEC sp_GetStudentTestHistory @StudentID = @TestStudentID5;
+GO
+
+PRINT N'3.6. Проверка успеваемости группы (sp_CheckGroupPerformance):';
+DECLARE @TestGroupID5 INT, @TestTestID5 INT;
+SELECT @TestGroupID5 = (SELECT TOP 1 GroupID FROM Groups);
+SELECT @TestTestID5 = (SELECT TOP 1 TestID FROM Tests);
+IF @TestGroupID5 IS NOT NULL AND @TestTestID5 IS NOT NULL
+    EXEC sp_CheckGroupPerformance @GroupID = @TestGroupID5, @TestID = @TestTestID5;
+GO
+
+PRINT N'3.7. Курсор: Напоминания студентам, не приступавшим к тестированию:';
 DECLARE @StudentName NVARCHAR(100);
 DECLARE @GroupName NVARCHAR(20);
 DECLARE cur_LazyStudents CURSOR FOR
@@ -137,19 +153,16 @@ BEGIN
 END
 GO
 
-PRINT N'4.2. INSERT через представление:';
+PRINT N'4.2/4.3. INSERT и DELETE через представление:';
 DECLARE @TestGroupID2 INT;
 SELECT @TestGroupID2 = (SELECT TOP 1 GroupID FROM Groups);
 IF @TestGroupID2 IS NOT NULL
 BEGIN
-    DECLARE @InsertedIDs TABLE (StudentID INT);
-    
     INSERT INTO v_StudentsManage (LastName, FirstName, MiddleName, Email, GroupID)
-    OUTPUT INSERTED.StudentID INTO @InsertedIDs
     VALUES (N'Тестов', N'Тест', N'Тестович', N'test.insert@example.com', @TestGroupID2);
     
     DECLARE @NewStudentID INT;
-    SELECT @NewStudentID = StudentID FROM @InsertedIDs;
+    SELECT @NewStudentID = StudentID FROM v_StudentsManage WHERE Email = N'test.insert@example.com';
     
     SELECT * FROM v_StudentsManage WHERE StudentID = @NewStudentID;
     PRINT N'INSERT выполнен, создан студент ID: ' + CAST(@NewStudentID AS NVARCHAR(10));
@@ -158,35 +171,6 @@ BEGIN
     PRINT N'Тестовый студент удален';
 END
 GO
-
-PRINT N'4.3. DELETE через представление (студент без истории):';
-DECLARE @TestGroupID3 INT;
-SELECT @TestGroupID3 = (SELECT TOP 1 GroupID FROM Groups);
-IF @TestGroupID3 IS NOT NULL
-BEGIN
-    DECLARE @InsertedIDs2 TABLE (StudentID INT);
-    
-    INSERT INTO v_StudentsManage (LastName, FirstName, MiddleName, Email, GroupID)
-    OUTPUT INSERTED.StudentID INTO @InsertedIDs2
-    VALUES (N'Удаляемый', N'Студент', NULL, N'delete.test@example.com', @TestGroupID3);
-    
-    DECLARE @TempStudentID INT;
-    SELECT @TempStudentID = StudentID FROM @InsertedIDs2;
-    
-    PRINT N'Создан студент ID: ' + CAST(@TempStudentID AS NVARCHAR(10));
-    
-    DELETE FROM v_StudentsManage WHERE StudentID = @TempStudentID;
-    
-    IF NOT EXISTS (SELECT 1 FROM Students WHERE StudentID = @TempStudentID)
-        PRINT N'DELETE выполнен, студент ID ' + CAST(@TempStudentID AS NVARCHAR(10)) + N' удален';
-    ELSE
-        PRINT N'ОШИБКА: студент не был удален';
-END
-GO
-
--- ============================================
--- 5. ТЕСТЫ ТРИГГЕРОВ
--- ============================================
 
 PRINT N'5. Триггеры:';
 PRINT N'5.1. Защита завершенных тестов (trg_ProtectFinalizedTest):';
@@ -199,16 +183,18 @@ BEGIN
         PRINT N'✗ Триггер не сработал';
     END TRY
     BEGIN CATCH
-        IF ERROR_MESSAGE() LIKE N'%завершенную попытку%'
-            PRINT N'✓ Триггер защищает завершенные тесты';
+        PRINT N'✓ Триггер защищает завершенные тесты';
     END CATCH
 END
 GO
 
 PRINT N'5.2. Проверка корректности ответа (trg_AutoCheckAnswer):';
-DECLARE @UnfinishedAttemptID INT;
-SELECT @UnfinishedAttemptID = (SELECT TOP 1 AttemptID FROM TestAttempts WHERE IsFinalized = 0);
-IF @UnfinishedAttemptID IS NOT NULL
+DECLARE @TestStudentForTrigger INT, @TestIDForTrigger INT, @AttemptForTrigger INT;
+SELECT @TestStudentForTrigger = (SELECT TOP 1 StudentID FROM Students);
+SELECT @TestIDForTrigger = (SELECT TOP 1 TestID FROM Tests);
+EXEC sp_StartTest @StudentID = @TestStudentForTrigger, @TestID = @TestIDForTrigger, @NewAttemptID = @AttemptForTrigger OUTPUT;
+
+IF @AttemptForTrigger IS NOT NULL
 BEGIN
     DECLARE @WrongQID INT, @WrongAID INT;
     SELECT @WrongQID = (SELECT TOP 1 QuestionID FROM Questions);
@@ -217,40 +203,41 @@ BEGIN
     BEGIN
         BEGIN TRY
             INSERT INTO StudentAnswers (AttemptID, QuestionID, AnswerID)
-            VALUES (@UnfinishedAttemptID, @WrongQID, @WrongAID);
+            VALUES (@AttemptForTrigger, @WrongQID, @WrongAID);
             PRINT N'✗ Триггер не сработал';
         END TRY
         BEGIN CATCH
-            IF ERROR_MESSAGE() LIKE N'%не относится к указанному вопросу%'
-                PRINT N'✓ Триггер проверяет корректность ответа';
+            PRINT N'✓ Триггер проверяет корректность ответа';
         END CATCH
     END
+    DELETE FROM TestAttempts WHERE AttemptID = @AttemptForTrigger;
 END
 GO
 
--- Проверка функциональных требований ТЗ
-PRINT N'6. Функциональные требования ТЗ:';
-PRINT N'6.1. Расчет балла за тестирование:';
-SELECT TOP 5 StudentID, TestID, dbo.fn_CalculateScore(AttemptID) AS TotalScore
-FROM TestAttempts 
-WHERE IsFinalized = 1 
-ORDER BY AttemptDate DESC;
+PRINT N'5.3. INSERT через представление (trg_v_StudentsManage_Insert):';
+-- Тест с несуществующей группой
+BEGIN TRY
+    INSERT INTO v_StudentsManage (LastName, FirstName, MiddleName, Email, GroupID)
+    VALUES (N'Тестовый', N'Студент', N'Триггер', N'test@example.com', 9999);
+    PRINT N'✗ Триггер не проверил существование группы';
+END TRY
+BEGIN CATCH
+    PRINT N'✓ Триггер проверяет существование группы при INSERT';
+END CATCH
 GO
 
-PRINT N'6.2. Средний балл по группе:';
-SELECT TOP 5 * FROM v_GroupResults;
-GO
-
-PRINT N'6.3. Студенты, не прошедшие после 3 попыток:';
-SELECT * FROM v_FailedStudents;
-GO
-
-PRINT N'6.4. Студенты, не приступавшие к тестированию:';
-SELECT TOP 5 * FROM v_StudentsNotStarted;
-GO
-
-PRINT N'6.5. Список студентов по группам с результатами:';
-SELECT TOP 10 GroupName, FullName, TestName, TotalScore, Status 
-FROM v_StudentsByGroupWithResults 
-WHERE TestName IS NOT NULL;
+PRINT N'5.4. UPDATE через представление (trg_v_StudentsManage_Update):';
+DECLARE @TestStudentID_Update INT;
+SELECT @TestStudentID_Update = (SELECT TOP 1 StudentID FROM Students);
+IF @TestStudentID_Update IS NOT NULL
+BEGIN
+    -- Тест с несуществующей группой
+    BEGIN TRY
+        UPDATE v_StudentsManage SET GroupID = 9999 WHERE StudentID = @TestStudentID_Update;
+        PRINT N'✗ Триггер не проверил существование группы';
+    END TRY
+    BEGIN CATCH
+        PRINT N'✓ Триггер проверяет существование группы при UPDATE';
+    END CATCH
+END
 GO

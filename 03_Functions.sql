@@ -27,7 +27,8 @@ RETURN
         t.TestName,
         ta.AttemptDate,
         dbo.fn_CalculateScore(ta.AttemptID) AS TotalScore,
-        CASE WHEN dbo.fn_CalculateScore(ta.AttemptID) >= t.MinScoreToPass THEN N'Сдал' ELSE N'Не сдал' END AS Status
+        CASE WHEN dbo.fn_CalculateScore(ta.AttemptID) >= t.MinScoreToPass THEN N'Сдал' ELSE N'Не сдал' END AS Status,
+        ROW_NUMBER() OVER (PARTITION BY ta.TestID ORDER BY ta.AttemptDate) AS AttemptNumber
     FROM TestAttempts ta
     JOIN Tests t ON ta.TestID = t.TestID
     WHERE ta.StudentID = @StudentID AND ta.IsFinalized = 1

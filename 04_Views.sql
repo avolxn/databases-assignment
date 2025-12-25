@@ -34,7 +34,7 @@ JOIN Students s ON g.GroupID = s.GroupID
 JOIN BestAttempts ba ON s.StudentID = ba.StudentID
 JOIN Tests t ON ba.TestID = t.TestID
 GROUP BY g.GroupName, t.TestName;
-G
+GO
 
 -- Студенты, не прошедшие тест после 3 попыток
 CREATE VIEW v_FailedStudents AS
