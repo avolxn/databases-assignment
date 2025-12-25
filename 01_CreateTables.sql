@@ -1,18 +1,18 @@
--- Создание базы данных
-USE master;
-GO
-
-IF EXISTS (SELECT name FROM sys.databases WHERE name = N'StudentTestingDB')
-BEGIN
-    ALTER DATABASE StudentTestingDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE StudentTestingDB;
-END
-GO
-
-CREATE DATABASE StudentTestingDB;
-GO
-
 USE StudentTestingDB;
+GO
+
+-- Удаление существующих таблиц
+IF OBJECT_ID('StudentAnswers', 'U') IS NOT NULL DROP TABLE StudentAnswers;
+IF OBJECT_ID('TestAttempts', 'U') IS NOT NULL DROP TABLE TestAttempts;
+IF OBJECT_ID('TestGroups', 'U') IS NOT NULL DROP TABLE TestGroups;
+IF OBJECT_ID('Answers', 'U') IS NOT NULL DROP TABLE Answers;
+IF OBJECT_ID('Questions', 'U') IS NOT NULL DROP TABLE Questions;
+IF OBJECT_ID('Tests', 'U') IS NOT NULL DROP TABLE Tests;
+IF OBJECT_ID('Students', 'U') IS NOT NULL DROP TABLE Students;
+IF OBJECT_ID('Groups', 'U') IS NOT NULL DROP TABLE Groups;
+IF OBJECT_ID('Faculties', 'U') IS NOT NULL DROP TABLE Faculties;
+IF OBJECT_ID('Subjects', 'U') IS NOT NULL DROP TABLE Subjects;
+IF OBJECT_ID('Teachers', 'U') IS NOT NULL DROP TABLE Teachers;
 GO
 
 -- 1. Факультеты
@@ -41,7 +41,7 @@ CREATE TABLE Students (
     GroupID INT NOT NULL,
     Email NVARCHAR(100) NULL,
     CONSTRAINT FK_Students_GroupID FOREIGN KEY (GroupID) 
-        REFERENCES Groups(GroupID) ON DELETE RESTRICT
+        REFERENCES Groups(GroupID) ON DELETE CASCADE
 );
 GO
 
@@ -70,9 +70,9 @@ CREATE TABLE Tests (
     TeacherID INT NOT NULL,
     MinScoreToPass INT DEFAULT 50,
     CONSTRAINT FK_Tests_SubjectID FOREIGN KEY (SubjectID) 
-        REFERENCES Subjects(SubjectID) ON DELETE RESTRICT,
+        REFERENCES Subjects(SubjectID) ON DELETE CASCADE,
     CONSTRAINT FK_Tests_TeacherID FOREIGN KEY (TeacherID) 
-        REFERENCES Teachers(TeacherID) ON DELETE RESTRICT
+        REFERENCES Teachers(TeacherID) ON DELETE CASCADE
 );
 GO
 
@@ -104,12 +104,11 @@ CREATE TABLE TestAttempts (
     StudentID INT NOT NULL,
     TestID INT NOT NULL,
     AttemptDate DATETIME DEFAULT GETDATE(),
-    TotalScore INT DEFAULT 0,
     IsFinalized BIT DEFAULT 0,
     CONSTRAINT FK_TestAttempts_StudentID FOREIGN KEY (StudentID) 
-        REFERENCES Students(StudentID) ON DELETE RESTRICT,
+        REFERENCES Students(StudentID) ON DELETE CASCADE,
     CONSTRAINT FK_TestAttempts_TestID FOREIGN KEY (TestID) 
-        REFERENCES Tests(TestID) ON DELETE RESTRICT
+        REFERENCES Tests(TestID) ON DELETE CASCADE
 );
 GO
 
@@ -122,9 +121,9 @@ CREATE TABLE StudentAnswers (
     CONSTRAINT FK_StudentAnswers_AttemptID FOREIGN KEY (AttemptID) 
         REFERENCES TestAttempts(AttemptID) ON DELETE CASCADE,
     CONSTRAINT FK_StudentAnswers_QuestionID FOREIGN KEY (QuestionID) 
-        REFERENCES Questions(QuestionID) ON DELETE CASCADE,
+        REFERENCES Questions(QuestionID) ON DELETE NO ACTION,
     CONSTRAINT FK_StudentAnswers_AnswerID FOREIGN KEY (AnswerID) 
-        REFERENCES Answers(AnswerID) ON DELETE CASCADE
+        REFERENCES Answers(AnswerID) ON DELETE NO ACTION
 );
 GO
 
@@ -139,7 +138,4 @@ CREATE TABLE TestGroups (
         REFERENCES Groups(GroupID) ON DELETE CASCADE,
     CONSTRAINT UQ_TestGroups_TestID_GroupID UNIQUE(TestID, GroupID)
 );
-GO
-
-PRINT 'Таблицы успешно созданы!';
 GO

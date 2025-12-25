@@ -26,8 +26,8 @@ RETURN
     SELECT 
         t.TestName,
         ta.AttemptDate,
-        ta.TotalScore,
-        CASE WHEN ta.TotalScore >= t.MinScoreToPass THEN N'Сдал' ELSE N'Не сдал' END AS Status
+        dbo.fn_CalculateScore(ta.AttemptID) AS TotalScore,
+        CASE WHEN dbo.fn_CalculateScore(ta.AttemptID) >= t.MinScoreToPass THEN N'Сдал' ELSE N'Не сдал' END AS Status
     FROM TestAttempts ta
     JOIN Tests t ON ta.TestID = t.TestID
     WHERE ta.StudentID = @StudentID AND ta.IsFinalized = 1
@@ -47,5 +47,26 @@ BEGIN
 END;
 GO
 
-PRINT 'Функции успешно созданы!';
+-- Скалярная функция: Расчет среднего балла по группе (только лучшие попытки)
+CREATE FUNCTION fn_GetGroupAverageScore (@GroupID INT, @TestID INT)
+RETURNS DECIMAL(5,2)
+AS
+BEGIN
+    DECLARE @AvgScore DECIMAL(5,2);
+    
+    SELECT @AvgScore = AVG(CAST(BestScore AS DECIMAL(5,2)))
+    FROM (
+        SELECT 
+            s.StudentID,
+            MAX(dbo.fn_CalculateScore(ta.AttemptID)) AS BestScore
+        FROM Students s
+        JOIN TestAttempts ta ON s.StudentID = ta.StudentID
+        WHERE s.GroupID = @GroupID 
+          AND ta.TestID = @TestID 
+          AND ta.IsFinalized = 1
+        GROUP BY s.StudentID
+    ) AS BestAttempts;
+    
+    RETURN ISNULL(@AvgScore, 0);
+END;
 GO

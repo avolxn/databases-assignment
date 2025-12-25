@@ -8,8 +8,8 @@ CREATE PROCEDURE sp_StartTest
     @NewAttemptID INT OUTPUT
 AS
 BEGIN
-    INSERT INTO TestAttempts (StudentID, TestID, AttemptDate, TotalScore, IsFinalized)
-    VALUES (@StudentID, @TestID, GETDATE(), 0, 0);
+    INSERT INTO TestAttempts (StudentID, TestID, AttemptDate, IsFinalized)
+    VALUES (@StudentID, @TestID, GETDATE(), 0);
     
     SET @NewAttemptID = SCOPE_IDENTITY();
 END;
@@ -39,13 +39,8 @@ CREATE PROCEDURE sp_FinishTest
     @AttemptID INT
 AS
 BEGIN
-    DECLARE @FinalScore INT;
-    -- Вызов скалярной функции
-    SET @FinalScore = dbo.fn_CalculateScore(@AttemptID);
-
     UPDATE TestAttempts
-    SET TotalScore = @FinalScore,
-        IsFinalized = 1
+    SET IsFinalized = 1
     WHERE AttemptID = @AttemptID;
 END;
 GO
@@ -61,7 +56,6 @@ BEGIN
     DECLARE @AttemptCount INT;
     DECLARE @BestScore INT;
     
-    -- Получаем название группы
     SELECT @GroupName = GroupName FROM Groups WHERE GroupID = @GroupID;
     
     -- Объявление курсора
@@ -69,7 +63,7 @@ BEGIN
         SELECT 
         s.LastName + ' ' + s.FirstName + ' ' + ISNULL(s.MiddleName, '') AS FullName,
         dbo.fn_CountAttempts(s.StudentID, @TestID) AS AttemptCount,
-        ISNULL(MAX(ta.TotalScore), 0) AS BestScore
+        ISNULL(MAX(dbo.fn_CalculateScore(ta.AttemptID)), 0) AS BestScore
         FROM Students s
     LEFT JOIN TestAttempts ta ON s.StudentID = ta.StudentID AND ta.TestID = @TestID AND ta.IsFinalized = 1
         WHERE s.GroupID = @GroupID
@@ -90,7 +84,4 @@ BEGIN
     CLOSE cur_GroupStudents;
     DEALLOCATE cur_GroupStudents;
 END;
-GO
-
-PRINT 'Хранимые процедуры успешно созданы!';
 GO

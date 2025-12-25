@@ -11,7 +11,7 @@ BEGIN
         SELECT 1 
         FROM inserted i 
         JOIN deleted d ON i.AttemptID = d.AttemptID 
-        WHERE d.IsFinalized = 1 AND (i.TotalScore != d.TotalScore OR i.AttemptDate != d.AttemptDate)
+        WHERE d.IsFinalized = 1 AND i.AttemptDate != d.AttemptDate
     )
     BEGIN
         RAISERROR (N'Нельзя изменять завершенную попытку тестирования.', 16, 1);
@@ -39,22 +39,45 @@ BEGIN
 END;
 GO
 
--- INSTEAD OF DELETE для представления v_StudentsManage
-CREATE TRIGGER trg_v_StudentsManage_Delete
+-- INSTEAD OF INSERT для представления v_StudentsManage
+CREATE TRIGGER trg_v_StudentsManage_Insert
 ON v_StudentsManage
-INSTEAD OF DELETE
+INSTEAD OF INSERT
 AS
 BEGIN
-    -- Проверка наличия истории тестирования
-    IF EXISTS (SELECT 1 FROM TestAttempts ta JOIN deleted d ON ta.StudentID = d.StudentID)
+    -- Проверка существования группы
+    IF EXISTS (SELECT 1 FROM inserted i WHERE NOT EXISTS (SELECT 1 FROM Groups WHERE GroupID = i.GroupID))
     BEGIN
-        RAISERROR (N'Нельзя удалить студента с существующей историей тестирования.', 16, 1);
+        RAISERROR (N'Указанная группа не существует.', 16, 1);
         RETURN;
     END
     
-    DELETE FROM Students WHERE StudentID IN (SELECT StudentID FROM deleted);
+    INSERT INTO Students (LastName, FirstName, MiddleName, Email, GroupID)
+    SELECT LastName, FirstName, MiddleName, Email, GroupID
+    FROM inserted;
 END;
 GO
 
-PRINT 'Триггеры успешно созданы!';
+-- INSTEAD OF UPDATE для представления v_StudentsManage
+CREATE TRIGGER trg_v_StudentsManage_Update
+ON v_StudentsManage
+INSTEAD OF UPDATE
+AS
+BEGIN
+    -- Проверка существования группы при изменении GroupID
+    IF EXISTS (SELECT 1 FROM inserted i WHERE NOT EXISTS (SELECT 1 FROM Groups WHERE GroupID = i.GroupID))
+    BEGIN
+        RAISERROR (N'Указанная группа не существует.', 16, 1);
+        RETURN;
+    END
+    
+    UPDATE Students
+    SET LastName = i.LastName,
+        FirstName = i.FirstName,
+        MiddleName = i.MiddleName,
+        Email = i.Email,
+        GroupID = i.GroupID
+    FROM Students s
+    JOIN inserted i ON s.StudentID = i.StudentID;
+END;
 GO
